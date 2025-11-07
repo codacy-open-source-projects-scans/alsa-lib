@@ -3098,7 +3098,7 @@ snd_pcm_sframes_t snd_pcm_avail(snd_pcm_t *pcm)
  * \param delayp Total I/O latency in frames
  * \return zero on success otherwise a negative error code
  *
- * The avail and delay values retuned are in sync.
+ * The avail and delay values returned are in sync.
  *
  * The function is thread-safe when built with the proper option.
  */
@@ -3107,7 +3107,7 @@ int snd_pcm_avail_delay(snd_pcm_t *pcm,
 			snd_pcm_sframes_t *delayp)
 {
 	snd_pcm_sframes_t sf;
-	int err;
+	int err, ok = 0;
 
 	assert(pcm && availp && delayp);
 	if (CHECK_SANITY(! pcm->setup)) {
@@ -3118,15 +3118,25 @@ int snd_pcm_avail_delay(snd_pcm_t *pcm,
 	err = __snd_pcm_hwsync(pcm);
 	if (err < 0)
 		goto unlock;
-	sf = __snd_pcm_avail_update(pcm);
-	if (sf < 0) {
-		err = (int)sf;
-		goto unlock;
+
+	/*
+	 * Delay value is relative to avail, so we have to
+	 * loop to avoid reporting stale delay data.
+	 */
+	while (1) {
+		sf = __snd_pcm_avail_update(pcm);
+		if (sf < 0) {
+			err = (int)sf;
+			goto unlock;
+		}
+		if (ok && sf == *availp)
+			break;
+		*availp = sf;
+		err = __snd_pcm_delay(pcm, delayp);
+		if (err < 0)
+			goto unlock;
+		ok = 1;
 	}
-	err = __snd_pcm_delay(pcm, delayp);
-	if (err < 0)
-		goto unlock;
-	*availp = sf;
 	err = 0;
  unlock:
 	snd_pcm_unlock(pcm->fast_op_arg);
@@ -8753,7 +8763,7 @@ _snd_pcm_parse_config_chmaps(snd_config_t *conf)
  * -EPIPE (overrun or underrun) and -ESTRPIPE (stream is suspended)
  * error codes trying to prepare given stream for next I/O.
  *
- * Note that this function returs the original error code when it is not
+ * Note that this function returns the original error code when it is not
  * handled inside this function (for example -EAGAIN is returned back).
  */
 int snd_pcm_recover(snd_pcm_t *pcm, int err, int silent)
