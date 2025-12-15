@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(alsa-lib, 1.2.15pre1)
+AC_INIT(alsa-lib, 1.2.15)
 
 AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -52,6 +52,7 @@ dnl Checks for library functions.
 AC_PROG_GCC_TRADITIONAL
 AC_CHECK_FUNCS([uselocale])
 AC_CHECK_FUNCS([eaccess])
+AC_CHECK_DECLS([closefrom])
 
 dnl Enable largefile support
 AC_SYS_LARGEFILE

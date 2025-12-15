@@ -334,6 +334,13 @@ __nomem:
 	return -ENOMEM;
 }
 
+int uc_mgr_card_number(struct ctl_list *ctl_list)
+{
+	if (ctl_list == NULL)
+		return -ENOENT;
+	return snd_ctl_card_info_get_card(ctl_list->ctl_info);
+}
+
 const char *uc_mgr_config_dir(int format)
 {
 	const char *path;
@@ -441,7 +448,7 @@ int uc_mgr_put_to_dev_list(struct dev_list *dev_list, const char *name)
 	list_for_each(pos, &dev_list->list) {
 		dlist = list_entry(pos, struct dev_list_node, list);
 		if (strcmp(dlist->name, name) == 0)
-			return 0;
+			return 0; /* already exists, no change */
 	}
 
 	dlist = calloc(1, sizeof(*dlist));
@@ -454,7 +461,7 @@ int uc_mgr_put_to_dev_list(struct dev_list *dev_list, const char *name)
 	}
 	dlist->name = n;
 	list_add(&dlist->list, &dev_list->list);
-	return 0;
+	return 1; /* new device added */
 }
 
 int uc_mgr_rename_in_dev_list(struct dev_list *dev_list, const char *src,
@@ -597,6 +604,7 @@ void uc_mgr_free_modifier(struct list_head *base)
 void uc_mgr_free_device(struct use_case_device *dev)
 {
 	free(dev->name);
+	free(dev->orig_name);
 	free(dev->comment);
 	uc_mgr_free_sequence(&dev->enable_list);
 	uc_mgr_free_sequence(&dev->disable_list);
@@ -799,6 +807,7 @@ void uc_mgr_free_verb(snd_use_case_mgr_t *uc_mgr)
 	uc_mgr_free_sequence(&uc_mgr->boot_list);
 	uc_mgr_free_sequence(&uc_mgr->default_list);
 	uc_mgr_free_value(&uc_mgr->value_list);
+	uc_mgr_free_value(&uc_mgr->global_value_list);
 	uc_mgr_free_value(&uc_mgr->variable_list);
 	free(uc_mgr->comment);
 	free(uc_mgr->conf_dir_name);
@@ -906,4 +915,20 @@ const char *uc_mgr_alibcfg_by_device(snd_config_t **top, const char *name)
 		return NULL;
 	*top = config;
 	return name + 9;
+}
+
+int uc_mgr_check_value(struct list_head *value_list, const char *identifier)
+{
+	struct ucm_value *val;
+	struct list_head *pos;
+
+	if (!value_list)
+		return -ENOENT;
+
+	list_for_each(pos, value_list) {
+		val = list_entry(pos, struct ucm_value, list);
+		if (strcmp(identifier, val->name) == 0)
+			return 0;
+	}
+	return -ENOENT;
 }
