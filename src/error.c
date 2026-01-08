@@ -34,6 +34,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+static void snd_lib_error_default(const char *file, int line, const char *function, int errcode, const char *fmt, ...);
+
 /**
  * Array of error codes in US ASCII.
  */
@@ -281,7 +283,8 @@ int snd_lib_log_filter(int prio, int interface, const char *configstr)
 	if (interface > 0 && interface <= SND_ILOG_LAST && debug_config.interface_levels[interface] > 0) {
 		level = debug_config.interface_levels[interface];
 	} else {
-		level = debug_config.global_level;	}
+		level = debug_config.global_level;
+	}
 
 	if (level == 0)
 		level = SND_LOG_ERROR;
@@ -315,6 +318,12 @@ static void snd_lib_vlog_default(int prio, int interface, const char *file, int 
 	}
 	if (local_error && prio == SND_LOG_ERROR) {
 		local_error(file, line, function, errcode, fmt, arg);
+		return;
+	}
+	if (snd_lib_error != snd_lib_error_default) {
+		if (prio == SND_LOG_ERROR)
+			snd_lib_error(file, line, function, errcode, fmt, arg);
+		/* ignore other priorities - restore old behaviour */
 		return;
 	}
 
