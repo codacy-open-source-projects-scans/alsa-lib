@@ -391,7 +391,7 @@ static int evaluate_define(snd_use_case_mgr_t *uc_mgr,
 	snd_config_iterator_t i, next;
 	snd_config_t *d, *n;
 	const char *id;
-	char *var, *s;
+	char *var, *s, *sid;
 	int err;
 
 	err = snd_config_search(cfg, "Define", &d);
@@ -427,8 +427,18 @@ static int evaluate_define(snd_use_case_mgr_t *uc_mgr,
 			snd_error(UCM, "value names starting with '@' are reserved for application variables");
 			return -EINVAL;
 		}
-		err = uc_mgr_set_variable(uc_mgr, id, s);
+		sid = (char *)id;
+		if (uc_mgr->conf_format >= 9) {
+			err = uc_mgr_get_substituted_value(uc_mgr, &sid, id);
+			if (err < 0) {
+				free(s);
+				return err;
+			}
+		}
+		err = uc_mgr_set_variable(uc_mgr, sid, s);
 		free(s);
+		if (id != sid)
+			free(sid);
 		if (err < 0)
 			return err;
 	}
@@ -495,7 +505,15 @@ static int evaluate_macro1(snd_use_case_mgr_t *uc_mgr,
 		err = snd_config_get_string(args, &s);
 		if (err < 0)
 			return err;
-		err = snd_config_load_string(&a, s, 0);
+		if (uc_mgr->conf_format < 9) {
+			err = snd_config_load_string(&a, s, 0);
+		} else {
+			err = uc_mgr_get_substituted_value(uc_mgr, &var2, s);
+			if (err >= 0) {
+				err = snd_config_load_string(&a, var2, 0);
+				free(var2);
+			}
+		}
 		if (err < 0)
 			return err;
 	} else if (snd_config_get_type(args) != SND_CONFIG_TYPE_COMPOUND) {
@@ -509,7 +527,7 @@ static int evaluate_macro1(snd_use_case_mgr_t *uc_mgr,
 		if (err < 0)
 			goto __err_path;
 		snprintf(name, sizeof(name), "__%s", id);
-		if (uc_mgr_get_variable(uc_mgr, name)) {
+		if (uc_mgr_get_variable(uc_mgr, name, false)) {
 			snd_error(UCM, "Macro argument '%s' is already defined", name);
 			goto __err_path;
 		}
@@ -711,9 +729,9 @@ int uc_mgr_evaluate_inplace(snd_use_case_mgr_t *uc_mgr,
 			    snd_config_t *cfg)
 {
 	long iterations = 10000;
-	int err1 = 0, err2 = 0, err3 = 0, err4 = 0, err5 = 0;
+	int err1 = 0, err2 = 0, err3 = 0, err4 = 0, err5 = 0, err6 = 0;
 
-	while (err1 == 0 || err2 == 0 || err3 == 0 || err4 == 0 || err5 == 0) {
+	while (err1 == 0 || err2 == 0 || err3 == 0 || err4 == 0 || err5 == 0 || err6 == 0) {
 		if (iterations == 0) {
 			snd_error(UCM, "Maximal inplace evaluation iterations number reached (recursive references?)");
 			return -EINVAL;
@@ -747,9 +765,12 @@ int uc_mgr_evaluate_inplace(snd_use_case_mgr_t *uc_mgr,
 			return err4;
 		if (err4 == 0)
 			continue;
-		err5 = evaluate_condition(uc_mgr, cfg);
+		err5 = uc_mgr_evaluate_repeat(uc_mgr, cfg);
 		if (err5 < 0)
 			return err5;
+		err6 = evaluate_condition(uc_mgr, cfg);
+		if (err6 < 0)
+			return err6;
 	}
 	return 0;
 }
