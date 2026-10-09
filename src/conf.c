@@ -1485,6 +1485,10 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 			endchr = ']';
 		}
 		c = get_nonwhite(input);
+		if (c < 0) {
+			err = c;
+			goto __end;
+		}
 		if (c != endchr) {
 			if (n)
 				snd_config_delete(n);
@@ -3254,6 +3258,40 @@ int snd_config_get_ireal(const snd_config_t *config, double *ptr)
 }
 
 /**
+ * \brief Returns the value of an integer or string configuration node as a long long.
+ * \param[in] config Handle to the configuration node.
+ * \param[out] ptr The node's value.
+ * \param[in] base The numeric base used to parse a string node (see \c strtoll()).
+ * \return Zero if successful, otherwise a negative error code.
+ *
+ * If the node's type is integer or integer64, the value is converted
+ * to the \c long \c long type on the fly. If the node's type is string,
+ * the string is parsed as a number using \a base.
+ *
+ * \par Errors:
+ * <dl>
+ * <dt>-EINVAL<dd>\a config is not an integer, integer64 or a parseable string node.
+ * </dl>
+ */
+int snd_config_get_llong(const snd_config_t *config, long long *ptr, int base)
+{
+	const char *str;
+
+	assert(config && ptr);
+	if (config->type == SND_CONFIG_TYPE_INTEGER)
+		*ptr = config->u.integer;
+	else if (config->type == SND_CONFIG_TYPE_INTEGER64)
+		*ptr = config->u.integer64;
+	else if (config->type == SND_CONFIG_TYPE_STRING) {
+		str = config->u.string;
+		if (str == NULL || safe_strtoll_base(str, ptr, base) < 0)
+			return -EINVAL;
+	} else
+		return -EINVAL;
+	return 0;
+}
+
+/**
  * \brief Returns the value of a string configuration node.
  * \param[in] config Handle to the configuration node.
  * \param[out] ptr The function puts the node's value at the address
@@ -4443,7 +4481,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 					goto __err;
 				}
 				while (1) {
-					char *s = strchr(driver, '.');
+					const char *s = strchr(driver, '.');
 					if (s == NULL)
 						break;
 					driver = s + 1;
